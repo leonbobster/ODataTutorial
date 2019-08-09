@@ -1,62 +1,66 @@
-﻿using Microsoft.AspNet.OData;
-using Microsoft.AspNet.OData.Extensions;
-using Microsoft.AspNet.OData.Query;
-using ODataTutorial.Models;
+﻿using ODataTutorial.Models;
+using System;
 using System.Collections.Generic;
 using System.Data.Entity;
-using System.Data.Entity.Infrastructure;
 using System.Linq;
-using System.Net;
-using System.Threading.Tasks;
+using System.Net.Http;
+using System.Text;
+using System.Web;
 using System.Web.Http;
+using System.Web.Http.Filters;
+using System.Web.Http.OData;
+using System.Web.Http.OData.Extensions;
+using System.Web.Http.OData.Query;
+using System.Web.Http.Routing;
+using System.Web.UI;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace ODataTutorial.Controllers
 {
-    public class ProductsController : ODataController
+    public class PageResult<T>
     {
-        ProductsContext db = new ProductsContext();
+        public long? TotalCount { get; set; }
+        public T Items { get; set; }
+    }
 
-        private bool ProductExists(int key)
+    public class PageResultAttribute : ActionFilterAttribute
+    {
+        public override void OnActionExecuted(HttpActionExecutedContext actionExecutedContext)
         {
-            return db.Products.Any(p => p.Id == key);
-        } 
-
-        protected override void Dispose(bool disposing)
-        {
-            db.Dispose();
-            base.Dispose(disposing);
-        }
-
-        // https://localhost:44387/Products?$count=true&pageSize=2&$filter=Category eq 'stuff'
-        public PageResult<Product> Get(ODataQueryOptions<Product> options, int pageSize = 5)
-        {
-            var results = options.ApplyTo(db.Products.AsQueryable(), new ODataQuerySettings()
+            base.OnActionExecuted(actionExecutedContext);
+            if (actionExecutedContext.Response != null)
             {
-                PageSize = pageSize
-            });
+                dynamic responseContent = null;
+                if (actionExecutedContext.Response.Content != null)
+                    responseContent = actionExecutedContext.Response.Content.ReadAsAsync<dynamic>().Result;
+                var count = actionExecutedContext.Response.RequestMessage.ODataProperties().TotalCount;
+                var response = new PageResult<dynamic>() {TotalCount = count, Items = responseContent};
 
-            return new PageResult<Product>(
-                results as IEnumerable<Product>,
-                Request.GetNextPageLink(pageSize),
-                Request.ODataProperties().TotalCount);
-        }
+                HttpResponseMessage message = new HttpResponseMessage
+                {
+                    StatusCode = actionExecutedContext.Response.StatusCode,
+                    Content = new StringContent(
+                        JsonConvert.SerializeObject(response),
+                        Encoding.UTF8, 
+                        "application/json")
+                };
 
-        [EnableQuery]
-        public SingleResult<Product> Get([FromODataUri] int key)
-        {
-            IQueryable<Product> result = db.Products.Where(p => p.Id == key);
-            return SingleResult.Create(result);
-        }
-
-        public async Task<IHttpActionResult> Post(Product product)
-        {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
+                actionExecutedContext.Response = message;
             }
-            db.Products.Add(product);
-            await db.SaveChangesAsync();
-            return Created(product);
+        }
+    }
+
+    public class ProductsController : ApiController
+    {
+        [PageResult, EnableQuery, HttpGet, Route("api/foo")]
+        public IQueryable<Product> Get()
+        {
+            var q = new ProductsContext().Set<Product>();
+            //.AsQueryable<Product>();
+            //q = q.Include("Category");
+            //q = q.Include("Box");
+            return q;
         }
     }
 }

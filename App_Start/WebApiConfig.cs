@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Web.Http;
 using ODataTutorial.Models;
-using Microsoft.AspNet.OData.Builder;
-using Microsoft.AspNet.OData.Extensions;
+using System.Net.Http.Formatting;
+using System.Web.Http.OData.Builder;
+using Newtonsoft.Json.Serialization;
 
 namespace ODataTutorial
 {
@@ -22,14 +23,6 @@ namespace ODataTutorial
                 routeTemplate: "api/{controller}/{id}",
                 defaults: new { id = RouteParameter.Optional }
             );
-
-            ODataModelBuilder builder = new ODataConventionModelBuilder();
-            builder.EntitySet<Product>("Products");
-            builder.EntityType<Product>().Filter("Category").OrderBy("Name");
-            config.MapODataServiceRoute(
-                routeName: "ODataRoute",
-                routePrefix: null,
-                model: builder.GetEdmModel());
         }
     }
 }
